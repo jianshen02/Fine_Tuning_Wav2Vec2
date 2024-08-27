@@ -13,10 +13,11 @@ import matplotlib.pyplot as plt
 TARGET_SAMPLING_RATE = 16000
 TARGET_LENGTH = 160000
 
-# 定义全局参数：
+# 定义全局参数
 NUM_WORKERS = 22
 BATCH_SIZE = 22
 NUM_PROC = 22
+
 
 # 自定义 DataCollator 类
 class DataCollatorForWav2Vec2(DataCollatorWithPadding):
@@ -33,6 +34,7 @@ class DataCollatorForWav2Vec2(DataCollatorWithPadding):
             "labels": labels_padded
         }
         return batch
+
 
 # 数据预处理函数
 def preprocess_function(processor, examples, device):
@@ -78,6 +80,7 @@ def preprocess_function(processor, examples, device):
         "labels": labels.to(device)  # Ensure this is on GPU
     }
 
+
 # 自定义 Trainer 类
 class CustomTrainer(Trainer):
     def __init__(self, *args, encoded_train_dataset=None, encoded_eval_dataset=None, **kwargs):
@@ -114,8 +117,8 @@ class CustomTrainer(Trainer):
         return super().evaluation_step(model, inputs)
 
 
+# 用于测试数据是否正常
 def sample_test(encoded_eval_dataset, encoded_train_dataset, model, device):
-    # 测试数据是否正常
     test_samples = encoded_eval_dataset.select(range(1))
     input_values = torch.tensor(test_samples["input_values"]).unsqueeze(0)
     labels = torch.tensor(test_samples["labels"]).unsqueeze(0)
@@ -138,6 +141,8 @@ def sample_test(encoded_eval_dataset, encoded_train_dataset, model, device):
     print(encoded_train_dataset[0])  # 打印第一个训练样本
     print(encoded_eval_dataset[0])  # 打印第一个验证样本
 
+
+# 绘制数据频率分布图以确定max_length
 def show_datasets(dataset):
     lengths = [len(sample["audio"]["array"]) for sample in dataset["train"]]
     plt.hist(lengths, bins=50)
@@ -146,6 +151,8 @@ def show_datasets(dataset):
     plt.title("Audio Length Distribution")
     plt.show()
 
+
+# 数据清洗，处理掉数据集中不合理的数据
 def data_cleaning(dataset):
     anomalous_indices = []
     for i, sample in enumerate(dataset["train"]):
@@ -159,10 +166,14 @@ def data_cleaning(dataset):
     dataset["train"] = dataset["train"].select([i for i in range(len(dataset["train"])) if i not in anomalous_indices])
     return dataset
 
+
+# 主函数
 def main():
+    # 自动选择训练设备，并输出
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    # 导入数据
     dataset = load_dataset(
         "mozilla-foundation/common_voice_11_0",
         "zh-CN",
@@ -170,8 +181,9 @@ def main():
         cache_dir="E:/huggingface/dataset"
     )
 
+    # 数据清洗
     dataset = data_cleaning(dataset)
-
+    # 导入训练集和验证集
     train_dataset = dataset["train"]
     eval_dataset = dataset["validation"]
 
@@ -181,12 +193,12 @@ def main():
         padding=True,
         return_tensors="pt"
     )
-
+    # 导入模型
     model = Wav2Vec2ForCTC.from_pretrained("jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn")
     processor = Wav2Vec2Processor.from_pretrained("jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn")
 
     preprocess_function_with_processor = partial(preprocess_function, processor, device=device)
-
+    # 映射数据
     encoded_train_dataset = train_dataset.map(
         preprocess_function_with_processor,
         remove_columns=["audio", "sentence"],
@@ -197,7 +209,7 @@ def main():
         remove_columns=["audio", "sentence"],
         num_proc=NUM_PROC
     )
-
+    # 训练参数配置
     training_args = TrainingArguments(
         output_dir='./results',
         evaluation_strategy='epoch',
@@ -212,7 +224,7 @@ def main():
     )
 
     data_collator = DataCollatorForWav2Vec2(tokenizer=processor.tokenizer)
-
+    # 训练器
     trainer = CustomTrainer(
         model=model.to(device),
         args=training_args,
@@ -220,13 +232,14 @@ def main():
         encoded_train_dataset=encoded_train_dataset,
         encoded_eval_dataset=encoded_eval_dataset
     )
-
+    # 开始训练并输出训练结果
     trainer.train()
     results = trainer.evaluate()
     print(results)
-
+    # 输出并保存模型
     model.save_pretrained('./fine-tuned-wav2vec2-asr')
     feature_extractor.save_pretrained('./fine-tuned-wav2vec2-asr')
+
 
 if __name__ == "__main__":
     main()
