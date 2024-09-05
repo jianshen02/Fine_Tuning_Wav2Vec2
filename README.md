@@ -15,4 +15,5 @@
 
 - 数据集链接：https://huggingface.co/datasets/mozilla-foundation/common_voice_11_0
 - 模型链接：https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn
+- 微调后的模型链接：https://huggingface.co/jianshen02/wav2vec2_common_voice_11_0
 
